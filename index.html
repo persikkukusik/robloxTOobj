@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NECO-ARC MODEL CONVERTER</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+  :root {
+    --bg: #05080a;
+    --panel: #090e12;
+    --border: #1a3a2a;
+    --green: #00ff88;
+    --green-dim: #00aa55;
+    --green-muted: #004422;
+    --amber: #ffaa00;
+    --red: #ff3355;
+    --text: #c8ffd4;
+    --text-dim: #4a8860;
+    --scanline: rgba(0,255,136,0.03);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 3px,
+      var(--scanline) 3px, var(--scanline) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  .terminal {
+    width: 100%;
+    max-width: 720px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    box-shadow: 0 0 0 1px #0a1a0f, 0 0 40px rgba(0,255,136,0.06), inset 0 0 60px rgba(0,0,0,0.5);
+    animation: flicker 8s infinite;
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    92% { opacity: 1; } 93% { opacity: 0.96; } 94% { opacity: 1; }
+    96% { opacity: 0.98; } 97% { opacity: 1; }
+  }
+
+  .titlebar {
+    background: var(--green-muted);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .titlebar-dots { display: flex; gap: 6px; }
+
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green-dim);
+    box-shadow: 0 0 4px var(--green-dim);
+  }
+
+  .titlebar-text {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+    letter-spacing: 2px;
+    flex: 1;
+    text-align: center;
+  }
+
+  .content { padding: 32px; }
+
+  .ascii-header {
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    color: var(--green-dim);
+    text-align: center;
+    line-height: 1.1;
+    margin-bottom: 8px;
+    text-shadow: 0 0 6px rgba(0,255,136,0.3);
+    white-space: pre;
+  }
+
+  .subtitle {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--green);
+    text-align: center;
+    letter-spacing: 4px;
+    text-shadow: 0 0 12px var(--green);
+    margin-bottom: 32px;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+
+  .tab-btn {
+    padding: 12px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab-btn:last-child { border-right: none; }
+
+  .tab-btn.active {
+    background: var(--green-muted);
+    color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+  }
+
+  .tab-btn:hover:not(.active) {
+    background: rgba(0,255,136,0.03);
+    color: var(--text);
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .drop-zone {
+    border: 2px dashed var(--green-dim);
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    margin-bottom: 24px;
+    background: rgba(0,255,136,0.02);
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--green);
+    background: rgba(0,255,136,0.05);
+    box-shadow: 0 0 20px rgba(0,255,136,0.1), inset 0 0 20px rgba(0,255,136,0.03);
+  }
+
+  .drop-zone input {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%;
+  }
+
+  .drop-icon {
+    font-family: 'VT323', monospace;
+    font-size: 52px;
+    color: var(--green-dim);
+    line-height: 1;
+    margin-bottom: 12px;
+    display: block;
+    text-shadow: 0 0 10px rgba(0,255,136,0.4);
+  }
+
+  .drop-label {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    color: var(--green);
+    letter-spacing: 2px;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .drop-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
+
+  .roblox-panel {
+    border: 1px solid var(--border);
+    padding: 28px;
+    margin-bottom: 24px;
+    background: rgba(0,255,136,0.02);
+  }
+
+  .roblox-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.9;
+    margin-bottom: 20px;
+  }
+
+  .roblox-desc span { color: var(--green-dim); }
+
+  .input-row { display: flex; gap: 10px; align-items: stretch; }
+
+  .input-label {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    color: var(--green-dim);
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    padding: 0 4px;
+  }
+
+  .mesh-input {
+    flex: 1;
+    background: #040709;
+    border: 1px solid var(--border);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.15s;
+    letter-spacing: 1px;
+  }
+
+  .mesh-input::placeholder { color: var(--text-dim); }
+
+  .mesh-input:focus {
+    border-color: var(--green-dim);
+    box-shadow: 0 0 10px rgba(0,255,136,0.08);
+  }
+
+  .btn-fetch {
+    background: var(--green-muted);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    letter-spacing: 2px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    text-shadow: 0 0 6px rgba(0,255,136,0.4);
+  }
+
+  .btn-fetch:hover:not(:disabled) {
+    background: rgba(0,255,136,0.15);
+    box-shadow: 0 0 16px rgba(0,255,136,0.15);
+  }
+
+  .btn-fetch:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .proxy-note {
+    margin-top: 14px;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.8;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .proxy-note span { color: var(--amber); }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 8px 0 24px; }
+
+  .log-panel {
+    background: #040709;
+    border: 1px solid var(--border);
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.9;
+    min-height: 120px;
+    max-height: 260px;
+    overflow-y: auto;
+    margin-bottom: 24px;
+  }
+
+  .log-panel::-webkit-scrollbar { width: 4px; }
+  .log-panel::-webkit-scrollbar-track { background: #040709; }
+  .log-panel::-webkit-scrollbar-thumb { background: var(--green-muted); }
+
+  .log-line { display: flex; gap: 10px; }
+  .log-line .tag { color: var(--green-dim); min-width: 60px; }
+  .log-line.ok   .val { color: var(--green); }
+  .log-line.info .val { color: var(--text-dim); }
+  .log-line.warn .val { color: var(--amber); }
+  .log-line.error .val { color: var(--red); }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .stat-box {
+    border: 1px solid var(--border);
+    padding: 14px;
+    text-align: center;
+    background: rgba(0,255,136,0.02);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    display: block;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .stat-val {
+    font-family: 'VT323', monospace;
+    font-size: 28px;
+    color: var(--green);
+    text-shadow: 0 0 8px rgba(0,255,136,0.5);
+    display: block;
+  }
+
+  .btn-download {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: transparent;
+    border: 2px solid var(--green);
+    color: var(--green);
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    letter-spacing: 4px;
+    cursor: pointer;
+    text-shadow: 0 0 8px var(--green);
+    box-shadow: 0 0 20px rgba(0,255,136,0.1);
+    transition: all 0.15s;
+    margin-bottom: 16px;
+  }
+
+  .btn-download:hover:not(:disabled) {
+    background: rgba(0,255,136,0.1);
+    box-shadow: 0 0 30px rgba(0,255,136,0.2), inset 0 0 20px rgba(0,255,136,0.05);
+  }
+
+  .btn-download:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    border-color: var(--text-dim);
+    color: var(--text-dim);
+    text-shadow: none;
+    box-shadow: none;
+  }
+
+  .btn-reset {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-reset:hover { border-color: var(--green-dim); color: var(--green-dim); }
+
+  .footer {
+    margin-top: 16px;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    letter-spacing: 1px;
+    line-height: 1.8;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 8px; height: 14px;
+    background: var(--green);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="terminal">
+  <div class="titlebar">
+    <div class="titlebar-dots">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+    <div class="titlebar-text">NECO-ARC SYSTEM // ROBLOX MESH CONVERTER v2.0</div>
+  </div>
+
+  <div class="content">
+    <div class="ascii-header">
+ /\  /\   ____  __  __
+( o)(o ) / ___)(  \/  )
+ \  /   ( (    )    (
+  \/     \___)(__)(__)</div>
+
+    <div class="subtitle">ROBLOX BINARY MESH TO OBJ</div>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabBtnFile"   onclick="switchTab('file',   this)">[ DROP FILE ]</button>
+      <button class="tab-btn"        id="tabBtnRoblox" onclick="switchTab('roblox', this)">[ ROBLOX MESH ID ]</button>
+    </div>
+
+    <!-- FILE TAB -->
+    <div class="tab-panel active" id="tab-file">
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="*/*">
+        <span class="drop-icon" id="dropIcon">[ ]</span>
+        <span class="drop-label" id="dropLabel">DROP FILE HERE OR CLICK TO SELECT</span>
+        <span class="drop-hint">roblox binary mesh format, any extension</span>
+      </div>
+    </div>
+
+    <!-- ROBLOX TAB -->
+    <div class="tab-panel" id="tab-roblox">
+      <div class="roblox-panel">
+        <div class="roblox-desc">
+          Enter a Roblox Mesh ID and the cat will fetch it directly from<br>
+          <span>assetdelivery.roblox.com/v1/asset/?id=YOUR_ID</span><br>
+          and convert it instantly. No manual downloading required.
+        </div>
+
+        <div class="input-row">
+          <span class="input-label">MESH ID &gt;</span>
+          <input class="mesh-input" type="text" id="meshInput"
+                 placeholder="e.g. 1234567890" maxlength="30">
+          <button class="btn-fetch" id="btnFetch" onclick="fetchRoblox()">FETCH + CONVERT</button>
+        </div>
+
+        <div class="proxy-note">
+          <span>NOTE:</span> Browsers block cross-origin requests, so this tool routes through
+          public CORS proxies automatically. If one fails it tries the next.
+          Nothing is stored — your ID is only used to build the Roblox asset URL.
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="log-panel" id="logPanel">
+      <div class="log-line info"><span class="tag">[SYS]</span><span class="val">Neco-Arc mesh converter v2.0 initialized. Roblox support: ENABLED.</span></div>
+      <div class="log-line info"><span class="tag">[SYS]</span><span class="val">Drop a raw mesh file OR enter a Roblox Mesh ID to begin.<span class="cursor"></span></span></div>
+    </div>
+
+    <div class="stats-grid hidden" id="statsGrid">
+      <div class="stat-box">
+        <span class="stat-label">VERTICES</span>
+        <span class="stat-val" id="statVerts">--</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">TRIANGLES</span>
+        <span class="stat-val" id="statFaces">--</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">OUTPUT SIZE</span>
+        <span class="stat-val" id="statSize">--</span>
+      </div>
+    </div>
+
+    <button class="btn-download" id="btnDownload" disabled>[ DOWNLOAD .OBJ ]</button>
+    <button class="btn-reset" onclick="resetAll()">reset / load another</button>
+  </div>
+</div>
+
+<div class="footer">
+  NECO-ARC SUPERIOR PARSING SYSTEMS (tm) -- ALL GLORY TO THE ELITE CAT<br>
+  roblox binary mesh v2.00 -- 40-byte vertex blocks (xyz / normals / uv) -- 12-byte face indices
+</div>
+
+<script>
+  // ---- STATE ----
+  let objBlob = null;
+  let outputFilename = 'model.obj';
+
+  const PROXIES = [
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://thingproxy.freeboard.io/fetch/${url}`,
+  ];
+
+  // ---- ELEMENTS ----
+  const logPanel    = document.getElementById('logPanel');
+  const btnDownload = document.getElementById('btnDownload');
+  const statsGrid   = document.getElementById('statsGrid');
+  const statVerts   = document.getElementById('statVerts');
+  const statFaces   = document.getElementById('statFaces');
+  const statSize    = document.getElementById('statSize');
+  const dropZone    = document.getElementById('dropZone');
+  const fileInput   = document.getElementById('fileInput');
+  const meshInput   = document.getElementById('meshInput');
+  const btnFetch    = document.getElementById('btnFetch');
+  const dropIcon    = document.getElementById('dropIcon');
+  const dropLabel   = document.getElementById('dropLabel');
+
+  // ---- TABS ----
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  // ---- LOGGING ----
+  function log(tag, msg, type = 'info') {
+    const line = document.createElement('div');
+    line.className = `log-line ${type}`;
+    line.innerHTML = `<span class="tag">[${tag}]</span><span class="val">${msg}</span>`;
+    logPanel.appendChild(line);
+    logPanel.scrollTop = logPanel.scrollHeight;
+  }
+
+  function clearLog() { logPanel.innerHTML = ''; }
+
+  // ---- FILE DROP ----
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) processFile(fileInput.files[0]);
+  });
+
+  meshInput.addEventListener('keydown', e => { if (e.key === 'Enter') fetchRoblox(); });
+
+  // ---- FILE PROCESSING ----
+  function processFile(file) {
+    prepareConvert();
+    outputFilename = (file.name.replace(/\.[^.]+$/, '') || 'model') + '.obj';
+    log('IN', `File received: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`, 'info');
+    const reader = new FileReader();
+    reader.onload = e => handleBuffer(e.target.result, file.name);
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ---- ROBLOX FETCH ----
+  async function fetchRoblox() {
+    const id = meshInput.value.trim();
+    if (!id || !/^\d+$/.test(id)) {
+      clearLog();
+      log('ERR', 'Please enter a valid numeric Roblox Mesh ID.', 'error');
+      return;
+    }
+
+    prepareConvert();
+    btnFetch.disabled = true;
+    btnFetch.textContent = 'FETCHING...';
+    outputFilename = `roblox_${id}.obj`;
+
+    const assetUrl = `https://assetdelivery.roblox.com/v1/asset/?id=${id}`;
+    log('NET', `Mesh ID: ${id}`, 'info');
+    log('NET', `Target: ${assetUrl}`, 'info');
+    log('NET', `Browser CORS policy requires a proxy. Trying ${PROXIES.length} options...`, 'info');
+
+    let buffer = null;
+
+    for (let i = 0; i < PROXIES.length; i++) {
+      const proxyUrl = PROXIES[i](assetUrl);
+      const proxyName = proxyUrl.split('?')[0].replace('https://', '');
+      log('NET', `[${i+1}/${PROXIES.length}] Trying ${proxyName}...`, 'info');
+      try {
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(14000) });
+        if (!res.ok) {
+          log('WARN', `HTTP ${res.status} from proxy ${i+1}. Trying next...`, 'warn');
+          continue;
+        }
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength < 30) {
+          log('WARN', `Proxy ${i+1} returned only ${buf.byteLength} bytes — likely blocked. Trying next...`, 'warn');
+          continue;
+        }
+        buffer = buf;
+        log('NET', `Proxy ${i+1} succeeded! Received ${(buffer.byteLength / 1024).toFixed(1)} KB.`, 'ok');
+        break;
+      } catch (err) {
+        log('WARN', `Proxy ${i+1} error: ${err.message}. Trying next...`, 'warn');
+      }
+    }
+
+    btnFetch.disabled = false;
+    btnFetch.textContent = 'FETCH + CONVERT';
+
+    if (!buffer) {
+      log('ERR', 'All proxies failed. Possible reasons:', 'error');
+      log('ERR', '  -- Mesh ID is invalid or the asset is private/deleted', 'error');
+      log('ERR', '  -- All proxy services are temporarily down', 'error');
+      log('ERR', 'Try downloading the file manually and using the Drop File tab.', 'error');
+      return;
+    }
+
+    handleBuffer(buffer, `roblox_${id}`);
+  }
+
+  // ---- BUFFER -> PARSE -> OBJ ----
+  function handleBuffer(buffer, sourceName) {
+    log('PARSE', 'Analyzing binary structure...', 'info');
+    try {
+      const result = parseAndConvert(buffer, sourceName);
+      objBlob = new Blob([result.text], { type: 'text/plain' });
+      const sizeKB = (objBlob.size / 1024).toFixed(1);
+
+      log('OK', `Conversion complete.`, 'ok');
+      statVerts.textContent = result.vertCount.toLocaleString();
+      statFaces.textContent = result.faceCount.toLocaleString();
+      statSize.textContent  = sizeKB + ' KB';
+      statsGrid.classList.remove('hidden');
+      btnDownload.disabled = false;
+      dropIcon.textContent  = '[+]';
+      dropLabel.textContent = 'CONVERTED SUCCESSFULLY';
+    } catch (err) {
+      log('ERR', `Failed: ${err.message}`, 'error');
+      log('ERR', 'Make sure this is a Roblox binary mesh (version 2.00).', 'error');
+    }
+  }
+
+  // ---- CORE PARSER ----
+  function parseAndConvert(buffer, sourceName) {
+    const view  = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+
+    // Validate "version 2.00\n" header
+    const HEADER = 'version 2.00\n';
+    let headerOk = bytes.length >= HEADER.length;
+    for (let i = 0; i < HEADER.length && headerOk; i++) {
+      if (bytes[i] !== HEADER.charCodeAt(i)) headerOk = false;
+    }
+
+    if (!headerOk) {
+      const preview = String.fromCharCode(...bytes.slice(0, 20))
+                            .replace(/[^\x20-\x7e\n]/g, '?')
+                            .trim();
+      throw new Error(`Unrecognized header: "${preview}". Only "version 2.00" binary mesh is supported.`);
+    }
+
+    log('HDR', 'Header "version 2.00" validated.', 'ok');
+
+    const HEADER_LEN = 13;
+    const vertCount  = view.getUint32(HEADER_LEN + 4, true);  // offset 17
+    const faceCount  = view.getUint32(HEADER_LEN + 8, true);  // offset 21
+
+    log('HDR', `Vertices: ${vertCount.toLocaleString()}`, 'ok');
+    log('HDR', `Faces: ${faceCount.toLocaleString()}`, 'ok');
+
+    const VERTEX_START = 25;
+    const FACE_START   = VERTEX_START + vertCount * 40;
+    const expectedSize = FACE_START   + faceCount * 12;
+
+    if (expectedSize !== buffer.byteLength) {
+      log('WARN', `Size check: expected ${expectedSize} bytes, got ${buffer.byteLength}. Proceeding.`, 'warn');
+    } else {
+      log('VAL', `File size validated (${buffer.byteLength} bytes).`, 'ok');
+    }
+
+    if (vertCount > 500000 || faceCount > 500000) {
+      throw new Error(`Mesh too large to convert in browser (${vertCount} verts, ${faceCount} faces).`);
+    }
+
+    log('PARSE', 'Extracting positions, normals, UVs, faces...', 'info');
+
+    const lines = [];
+    lines.push('# Converted by Neco-Arc Model Converter v2.0');
+    lines.push(`# Source: ${sourceName}`);
+    lines.push(`# Vertices: ${vertCount}, Faces: ${faceCount}`);
+    lines.push('');
+
+    // v
+    for (let i = 0; i < vertCount; i++) {
+      const o = VERTEX_START + i * 40;
+      lines.push(`v ${view.getFloat32(o,    true).toFixed(6)} ${view.getFloat32(o+4,  true).toFixed(6)} ${view.getFloat32(o+8,  true).toFixed(6)}`);
+    }
+    lines.push('');
+
+    // vt
+    for (let i = 0; i < vertCount; i++) {
+      const o = VERTEX_START + i * 40 + 24;
+      lines.push(`vt ${view.getFloat32(o,   true).toFixed(6)} ${view.getFloat32(o+4, true).toFixed(6)}`);
+    }
+    lines.push('');
+
+    // vn
+    for (let i = 0; i < vertCount; i++) {
+      const o = VERTEX_START + i * 40 + 12;
+      lines.push(`vn ${view.getFloat32(o,   true).toFixed(6)} ${view.getFloat32(o+4, true).toFixed(6)} ${view.getFloat32(o+8, true).toFixed(6)}`);
+    }
+    lines.push('');
+
+    lines.push('g mesh');
+    lines.push('');
+
+    // f (1-indexed)
+    for (let i = 0; i < faceCount; i++) {
+      const o  = FACE_START + i * 12;
+      const i0 = view.getUint32(o,    true) + 1;
+      const i1 = view.getUint32(o+4,  true) + 1;
+      const i2 = view.getUint32(o+8,  true) + 1;
+      lines.push(`f ${i0}/${i0}/${i0} ${i1}/${i1}/${i1} ${i2}/${i2}/${i2}`);
+    }
+    lines.push('');
+
+    return { text: lines.join('\n'), vertCount, faceCount };
+  }
+
+  // ---- DOWNLOAD ----
+  btnDownload.addEventListener('click', () => {
+    if (!objBlob) return;
+    const url = URL.createObjectURL(objBlob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = outputFilename;
+    a.click();
+    URL.revokeObjectURL(url);
+    log('OUT', `Saved as "${outputFilename}". The elite cat is satisfied.`, 'ok');
+  });
+
+  // ---- RESET ----
+  function prepareConvert() {
+    objBlob = null;
+    btnDownload.disabled = true;
+    statsGrid.classList.add('hidden');
+    fileInput.value  = '';
+    dropIcon.textContent  = '[ ]';
+    dropLabel.textContent = 'DROP FILE HERE OR CLICK TO SELECT';
+    clearLog();
+  }
+
+  function resetAll() {
+    prepareConvert();
+    meshInput.value = '';
+    log('SYS', 'Reset complete. Ready for next operation.', 'info');
+  }
+</script>
+</body>
+</html>
